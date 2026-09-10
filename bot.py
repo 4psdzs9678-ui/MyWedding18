@@ -78,7 +78,13 @@ async def process_name(message: Message, state: FSMContext):
     await message.answer(QUALITY_REMINDER.format(name=guest["name"]))
 
 
-async def _handle_media(message: Message, file_id: str, file_unique_id: str, file_type: str):
+async def _handle_media(message: Message, file_id: str, file_unique_id: str, file_type: str, backup_as: str = None):
+    # backup_as: "photo" | "video" | "document" — как именно переслать в канал-хранилище.
+    # Если не указано, используем file_type (для нативных фото/видео/кружочков).
+    # Файлы, присланные как документ, ВСЕГДА пересылаем через send_document —
+    # Telegram не разрешает переслать document file_id через send_photo/send_video.
+    if backup_as is None:
+        backup_as = file_type
     guest = await db.get_guest(message.from_user.id)
     if not guest:
         await message.answer(
@@ -93,9 +99,9 @@ async def _handle_media(message: Message, file_id: str, file_unique_id: str, fil
     if BACKUP_CHAT_ID:
         try:
             caption = f"От: {guest['name']} (@{message.from_user.username or 'без юзернейма'})"
-            if file_type == "photo":
+            if backup_as == "photo":
                 sent = await bot.send_photo(BACKUP_CHAT_ID, file_id, caption=caption)
-            elif file_type == "video":
+            elif backup_as == "video":
                 sent = await bot.send_video(BACKUP_CHAT_ID, file_id, caption=caption)
             else:
                 sent = await bot.send_document(BACKUP_CHAT_ID, file_id, caption=caption)
@@ -130,7 +136,7 @@ async def handle_document(message: Message):
             "Этот файл не похож на фото или видео. Пожалуйста, присылайте только фото и видео."
         )
         return
-    await _handle_media(message, doc.file_id, doc.file_unique_id, file_type)
+    await _handle_media(message, doc.file_id, doc.file_unique_id, file_type, backup_as="document")
 
 
 @dp.message(F.photo)
